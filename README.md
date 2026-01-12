@@ -9,9 +9,6 @@ A responsive web application designed to track learning milestones and project p
 ## 📖 About the Project
 This tool helps maintain personal accountability by visualizing task completion. Beyond the UI, the core of this project is a focus on **security and best practices in API communication.**
 
-> **"If you want peace, conquer yourself."**
-> This mantra drives the focus of this project: building personal discipline and technical integrity.
-
 ### 🛡️ Security & Architecture
 To protect sensitive credentials, this project utilizes a decoupled architecture:
 * **Frontend:** Hosted on GitHub Pages.
