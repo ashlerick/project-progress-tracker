@@ -93,22 +93,14 @@
     </div>
 
     <script>
-        fetch('https://my-github-proxy-steel.vercel.app/api/fetch-repos')
-        .then(response => response.json())
-        .then(data => {
-            console.log("Securely fetched data:", data);
-        });
-
         const CONFIG = {
             owner: 'ashlerick',
             username: 'ashlerick',
-            pat: 'pat here',
-            currentRepo: 'drr'
+            currentRepo: 'drr',
+            proxyUrl: 'https://my-github-proxy-steel.vercel.app/api/fetch-repos'
         };
 
         const INITIAL_LIMIT = 6;
-        const API_BASE = 'https://api.github.com';
-
         const MESSAGE_BOX = document.getElementById('message-box');
         const FETCH_BUTTON = document.getElementById('fetch-button');
         const LOADING_SPINNER = document.getElementById('loading-spinner');
@@ -120,7 +112,6 @@
 
         function switchRepo(repoName) {
             CONFIG.currentRepo = repoName;
-            
             const drrBtn = document.getElementById('btn-drr');
             const payBtn = document.getElementById('btn-payables');
 
@@ -136,6 +127,7 @@
             fetchProgress();
         }
 
+        // Helper functions for UI
         function formatDate(isoDate) {
             if (!isoDate) return 'N/A';
             return new Date(isoDate).toLocaleDateString('en-US', {
@@ -147,25 +139,6 @@
             MESSAGE_BOX.textContent = message;
             MESSAGE_BOX.className = isError ? 'text-red-600 font-medium' : 'text-green-600 font-medium';
             setTimeout(() => MESSAGE_BOX.textContent = '', 5000);
-        }
-
-        function getHeaders(pat) {
-            const headers = { 'Accept': 'application/vnd.github+json' };
-            if (pat) headers['Authorization'] = `Bearer ${pat}`;
-            return headers;
-        }
-
-        async function exponentialBackoffFetch(url, options = {}, retries = 3) {
-            for (let i = 0; i < retries; i++) {
-                const response = await fetch(url, options);
-                if (response.ok) return response;
-                if (response.status === 403 || response.status === 429) {
-                    const wait = (i + 1) * 2000;
-                    await new Promise(r => setTimeout(r, wait));
-                    continue;
-                }
-                throw new Error(`Error ${response.status}`);
-            }
         }
 
         function createCommitCard(commit) {
@@ -212,7 +185,7 @@
             container.innerHTML = '';
             buttonContainer.innerHTML = '';
 
-            if (data.length === 0) {
+            if (!data || data.length === 0) {
                 container.innerHTML = '<p class="text-gray-400 text-sm italic p-4">No recent activity found.</p>';
                 return;
             }
@@ -224,13 +197,19 @@
 
             if (hidden.length > 0) {
                 const hiddenDivId = `${containerId}-hidden`;
-                const hiddenContent = document.createElement('div');
-                hiddenContent.id = hiddenDivId;
+                let hiddenContent = document.getElementById(hiddenDivId);
+                
+                if (!hiddenContent) {
+                    hiddenContent = document.createElement('div');
+                    hiddenContent.id = hiddenDivId;
+                    container.after(hiddenContent);
+                }
+
                 hiddenContent.className = 'hidden mt-4 space-y-4 grid grid-cols-1 gap-4';
                 if(containerId.includes('commits')) hiddenContent.className = 'hidden mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6';
                 
+                hiddenContent.innerHTML = '';
                 hidden.forEach(item => hiddenContent.innerHTML += cardFunc(item, status));
-                container.after(hiddenContent);
 
                 const btn = document.createElement('button');
                 btn.className = "text-xs font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest";
@@ -243,30 +222,27 @@
             }
         }
 
+
         async function fetchProgress() {
-            const { owner, username, pat, currentRepo } = CONFIG;
-            
             RESULTS_DASHBOARD.classList.add('opacity-50');
             LOADING_SPINNER.classList.remove('hidden');
             FETCH_BUTTON.disabled = true;
 
             try {
-                const headers = getHeaders(pat);
-                const baseUrl = `${API_BASE}/repos/${owner}/${currentRepo}`;
-
-                const [commitsRes, openRes, closedRes] = await Promise.all([
-                    exponentialBackoffFetch(`${baseUrl}/commits?author=${username}&per_page=50`, { headers }),
-                    exponentialBackoffFetch(`${baseUrl}/issues?state=open&per_page=50`, { headers }),
-                    exponentialBackoffFetch(`${baseUrl}/issues?state=closed&per_page=50`, { headers })
-                ]);
-
-                renderList(await commitsRes.json(), 'commits-results', createCommitCard);
-                renderList(await openRes.json(), 'open-issues-results', createIssueCard, 'open');
-                renderList(await closedRes.json(), 'closed-issues-results', createIssueCard, 'closed');
+                const response = await fetch(`${CONFIG.proxyUrl}?repo=${CONFIG.currentRepo}&user=${CONFIG.username}`);
+                
+                if (!response.ok) throw new Error('Failed to fetch from proxy');
+                
+                const data = await response.json();
+                
+                renderList(data.commits, 'commits-results', createCommitCard);
+                renderList(data.openIssues, 'open-issues-results', createIssueCard, 'open');
+                renderList(data.closedIssues, 'closed-issues-results', createIssueCard, 'closed');
 
                 LAST_LOADED.textContent = new Date().toLocaleTimeString();
             } catch (e) {
-                displayMessage(e.message);
+                displayMessage("Proxy Error: " + e.message);
+                console.error(e);
             } finally {
                 RESULTS_DASHBOARD.classList.remove('opacity-50');
                 LOADING_SPINNER.classList.add('hidden');
